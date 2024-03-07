@@ -92,4 +92,4 @@ $HOME/dev_ws/build/groot/Groot --mode monitor --publisher_port 2666 --server_por
 
 NOTE: best way is to run commands above just after you have followed the instructions as mentioned in `In terminal 3`.
 
-![groot](groot.png)
+![groot](groot2.png)
