@@ -16,8 +16,8 @@ move_action_node:
       x: 0.0
       y: 2.0
     wp4:
-      x: -0.5
-      y: -0.5
+      x: 0.0
+      y: 0.0
     wp_control:
       x: -2.0
       y: -0.4
@@ -43,8 +43,8 @@ move_action_node1:
       x: -0.5
       y: -0.5
     wp_control:
-      x: -2.0
-      y: -0.4
+      x: 0.2
+      y: 0.2
 
 
 # move_action_node:

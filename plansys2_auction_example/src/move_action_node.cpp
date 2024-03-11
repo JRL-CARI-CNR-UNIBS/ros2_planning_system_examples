@@ -20,9 +20,11 @@
 #include <algorithm>
 #include <functional>
 
-#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav2_msgs/action/compute_path_to_pose.hpp"
 #include "nav2_util/geometry_utils.hpp"
@@ -32,6 +34,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
+#include "tf2_ros/static_transform_broadcaster.h"
+
 using namespace std::chrono_literals;
 
 class MoveAction : public plansys2::ActionExecutorClient
@@ -40,6 +44,8 @@ public:
   MoveAction()
   : plansys2::ActionExecutorClient("move", 500ms)
   {
+    tf_broadcaster_ =
+      std::make_unique<tf2_ros::StaticTransformBroadcaster>(*this);
 
     declare_parameter<std::vector<std::string>>("waypoints", std::vector<std::string>());
     auto waypoint_names = get_parameter("waypoints").as_string_array();
@@ -60,6 +66,17 @@ public:
 
       waypoints_[name] = wp;
       RCLCPP_INFO(get_logger(), "Waypoint: %s, x: %f, y: %f", name.c_str(), wp.pose.position.x, wp.pose.position.y);
+
+      // /* Send waypoints to tf broadcaster */
+      // geometry_msgs::msg::TransformStamped wp_t;
+      // wp_t.header = wp.header;
+      // wp_t.child_frame_id = std::string(get_name()) + "_" + name;
+      // wp_t.transform.translation.x = wp.pose.position.x;
+      // wp_t.transform.translation.y = wp.pose.position.y;
+      // wp_t.transform.translation.z = wp.pose.position.z;
+      // wp_t.transform.rotation = wp.pose.orientation;
+      // tf_broadcaster_->sendTransform(wp_t);
+
     }
 
     using namespace std::placeholders;
@@ -242,6 +259,16 @@ private:
     goal.start = current_pos_;
     goal.goal = waypoints_[wp_to_navigate];
 
+    /* Send waypoints to tf broadcaster */
+    geometry_msgs::msg::TransformStamped wp_t;
+    wp_t.header = goal.goal.header;
+    wp_t.child_frame_id = std::string(get_name()) + "_" + wp_to_navigate;
+    wp_t.transform.translation.x = goal.goal.pose.position.x;
+    wp_t.transform.translation.y = goal.goal.pose.position.y;
+    wp_t.transform.translation.z = goal.goal.pose.position.z;
+    wp_t.transform.rotation = goal.goal.pose.orientation;
+    tf_broadcaster_->sendTransform(wp_t);
+
     goal.planner_id = "GridBased";
     RCLCPP_INFO(get_logger(), "Pre send goal");
 
@@ -251,6 +278,7 @@ private:
   } 
 
   std::map<std::string, geometry_msgs::msg::PoseStamped> waypoints_;
+  std::unique_ptr<tf2_ros::StaticTransformBroadcaster> tf_broadcaster_;
 
   using NavigationGoalHandle =
     rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>;
