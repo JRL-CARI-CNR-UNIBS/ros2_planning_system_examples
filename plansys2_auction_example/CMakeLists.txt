@@ -16,6 +16,7 @@ find_package(plansys2_planner REQUIRED)
 find_package(plansys2_problem_expert REQUIRED)
 find_package(plansys2_pddl_parser REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -31,6 +32,7 @@ set(dependencies
     plansys2_problem_expert
     plansys2_pddl_parser
     tf2_ros
+    nav2_costmap_2d
 )
 
 add_executable(move_action_node src/move_action_node.cpp)

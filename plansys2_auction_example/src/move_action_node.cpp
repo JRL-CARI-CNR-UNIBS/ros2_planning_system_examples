@@ -35,6 +35,8 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 
 #include "tf2_ros/static_transform_broadcaster.h"
+#include "nav2_costmap_2d/costmap_subscriber.hpp"
+#include "nav2_costmap_2d/cost_values.hpp"
 
 using namespace std::chrono_literals;
 
@@ -44,8 +46,11 @@ public:
   MoveAction()
   : plansys2::ActionExecutorClient("move", 500ms)
   {
+    RCLCPP_INFO(get_logger(), "MoveAction created");
+
     tf_broadcaster_ =
       std::make_unique<tf2_ros::StaticTransformBroadcaster>(*this);
+    RCLCPP_INFO(get_logger(), "MoveAction created");
 
     declare_parameter<std::vector<std::string>>("waypoints", std::vector<std::string>());
     auto waypoint_names = get_parameter("waypoints").as_string_array();
@@ -113,7 +118,13 @@ public:
         compute_path_action_client_->wait_for_action_server(std::chrono::seconds(5));
     } while (!is_action_server_ready);
     RCLCPP_INFO(get_logger(), "Compute path action server ready");
-  
+
+    costmap_subscriber_ = std::make_unique<nav2_costmap_2d::CostmapSubscriber>(
+      shared_from_this(), 
+      "/global_costmap/costmap_raw");
+
+    RCLCPP_INFO(get_logger(), "COSTMAP created");
+
     // path_pub_->on_activate();
     
     return CallbackReturnT::SUCCESS; 
@@ -188,9 +199,82 @@ private:
   void do_work()
   {
   }
+  double calculate_path_cost(const nav_msgs::msg::Path& path)
+  {
+    if(path.poses.size() == 0)
+    {
+      RCLCPP_INFO(get_logger(), "Empty path. Returning infinity.");
+      return std::numeric_limits<double>::infinity();
+    }
+
+    unsigned int mx = 0;
+    unsigned int my = 0;
+    unsigned int cost = 0.0;
+
+    std::vector<double> costs;
+    costs.reserve(path.poses.size());
+
+    std::shared_ptr<nav2_costmap_2d::Costmap2D> costmap = nullptr;
+    bool costmap_ready = false;
+
+    while (!costmap_ready && rclcpp::ok()) {
+        try {
+            costmap = costmap_subscriber_->getCostmap();
+            if (costmap) {
+                costmap_ready = true;
+            } else {
+                return std::numeric_limits<double>::infinity();
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_INFO(get_logger(), "Waiting costmap");
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+
+    for (const auto& pose : path.poses)
+    {
+      costmap->worldToMap(pose.pose.position.x, pose.pose.position.y, mx, my);
+      cost = costmap->getCost(mx, my);
+      
+      if (cost == nav2_costmap_2d::LETHAL_OBSTACLE || cost == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE)
+      {
+        return std::numeric_limits<double>::infinity();
+      }
+      costs.push_back(static_cast<double>(cost));
+    }
+    double std_cost = 0.0;
+    double cumulative_cost = std::accumulate(costs.begin(), costs.end(), 0.0);
+    double lambda = 0.98;
+    
+    double weighted_sum = 0.0;
+
+    for (size_t i = 0; i < costs.size(); ++i) {
+        double weight = std::pow(lambda, static_cast<double>(i)); // Peso
+        weighted_sum += costs[i] * weight; // Aggiorna l'accumulatore con il contributo pesato di questo elemento
+    }
+
+    RCLCPP_INFO(get_logger(), "L'accumulo pesato degli elementi è: %f", weighted_sum);
+
+    double mean_cost = cumulative_cost/costs.size();
+
+    for(const auto& cost: costs)
+    {
+      std_cost += std::pow(cost - mean_cost, 2);
+    }
+    std_cost = std::sqrt(std_cost/costs.size());
+    RCLCPP_INFO(get_logger(), "-------------------------------");
+    RCLCPP_INFO(get_logger(), "Path mean cost: %f", mean_cost);
+    RCLCPP_INFO(get_logger(), "Path cumulative cost: %f", cumulative_cost);
+    RCLCPP_INFO(get_logger(), "Path std cost: %f", std_cost);
+    RCLCPP_INFO(get_logger(), "Path weighted cost: %f", weighted_sum);
+
+    return cumulative_cost;
+
+  }
 
   void compute_action_cost(const plansys2_msgs::msg::ActionExecution::SharedPtr msg)
   {
+    
     RCLCPP_INFO(get_logger(), "Computing action cost");
     auto send_goal_options = rclcpp_action::Client<nav2_msgs::action::ComputePathToPose>::SendGoalOptions();
 
@@ -218,6 +302,10 @@ private:
 
       auto path = result.result->path;
       double path_length = nav2_util::geometry_utils::calculate_path_length(path);
+
+      auto test_cost = calculate_path_cost(path);
+      RCLCPP_INFO(get_logger(), "Length of path: %f", path_length);
+
       action_cost->nominal_cost = path_length;
       action_cost->std_dev_cost = 0.0;
       this->set_action_cost(action_cost);
@@ -226,7 +314,6 @@ private:
       
       path_pub_->publish(path);
 
-      RCLCPP_INFO(get_logger(), "Action Cost (Length of path): %f", path_length);
 
     };
 
@@ -279,6 +366,7 @@ private:
 
   std::map<std::string, geometry_msgs::msg::PoseStamped> waypoints_;
   std::unique_ptr<tf2_ros::StaticTransformBroadcaster> tf_broadcaster_;
+  std::unique_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_subscriber_;
 
   using NavigationGoalHandle =
     rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>;
