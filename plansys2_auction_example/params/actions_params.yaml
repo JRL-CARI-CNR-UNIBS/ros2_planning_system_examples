@@ -6,6 +6,7 @@ move_action_node:
       - "wp3"
       - "wp4"
       - "wp_control"
+    
     wp1:
       x: 0.0
       y: -2.0

@@ -199,6 +199,7 @@ private:
   void do_work()
   {
   }
+  
   double calculate_path_cost(const nav_msgs::msg::Path& path)
   {
     if(path.poses.size() == 0)
@@ -274,7 +275,11 @@ private:
 
   void compute_action_cost(const plansys2_msgs::msg::ActionExecution::SharedPtr msg)
   {
-    
+    // compute_move_action_cost(funz_obj_t,void*(MoveAction::*fp)(ActionCostPtr), MoveAction*)
+    // {}
+
+    // compute_move_action_cost(funz_obj, this->set_action_cost, this->send_response);
+
     RCLCPP_INFO(get_logger(), "Computing action cost");
     auto send_goal_options = rclcpp_action::Client<nav2_msgs::action::ComputePathToPose>::SendGoalOptions();
 
