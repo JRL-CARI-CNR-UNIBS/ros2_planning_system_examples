@@ -316,10 +316,7 @@ private:
       this->set_action_cost(action_cost);
       this->send_response(msg);      
 
-      
       path_pub_->publish(path);
-
-
     };
 
     send_goal_options.goal_response_callback = [this, msg](const ComputePathGoalHandle::SharedPtr & goal_handle)
